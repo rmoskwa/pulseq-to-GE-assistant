@@ -1,0 +1,8 @@
+.venv/
+.claude/
+ge-sequence-examples/
+pge2-clone/
+pulceq-clone/
+pulseq-source-code/
+gre2d.seq
+test_pge2.m
