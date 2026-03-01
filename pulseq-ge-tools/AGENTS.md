@@ -4,27 +4,25 @@ You are assisting a pulse sequence programmer with converting a vendor-neutral P
 
 ## Setup
 
-### Required dependencies
+### Dependencies
 
-| Dependency | Purpose | Source |
+| Dependency | Purpose | Status |
 |------------|---------|--------|
-| **Pulseq** (`+mr` toolbox) | Sequence authoring | https://github.com/pulseq/pulseq |
-| **PulCeq** (`seq2ceq`) | .seq → Ceq conversion | https://github.com/HarmonizedMRI/PulCeq |
-| **pge2** (`+pge2` toolbox) | GE hardware checks, .pge writing | https://github.com/GEHC-External/pulseq-ge-interpreter |
+| **Pulseq** (`+mr` toolbox) | Sequence authoring | External — https://github.com/pulseq/pulseq |
+| **PulCeq** (`seq2ceq`) | .seq → Ceq conversion | Bundled in `deps/` |
+| **pge2** (`+pge2` toolbox) | GE hardware checks, .pge writing | Bundled in `deps/` |
 
 ### Quick start
 
 ```matlab
-% Pass the directories containing +mr, seq2ceq.m, and +pge2 (works like addpath)
-pulseq_ge.setup('/path/to/pulseq/matlab', ...
-                '/path/to/PulCeq/matlab', ...
-                '/path/to/pge2/matlab');
+% Point to your Pulseq installation (PulCeq and pge2 are bundled)
+pulseq_ge.setup('/path/to/pulseq/matlab');
 
 r = pulseq_ge.lint('mySequence.m');              % static analysis
 result = pulseq_ge.pipeline('myseq.seq', 'coil', 'xrm');  % full validation
 ```
 
-If dependencies are already on the MATLAB path, `pulseq_ge.setup()` with no arguments will verify them.
+If Pulseq is already on the MATLAB path, `pulseq_ge.setup()` with no arguments will verify all dependencies.
 
 If `pulseq_ge` is not available, the checklist and patterns below still apply — run the pipeline commands manually (see Section 5).
 

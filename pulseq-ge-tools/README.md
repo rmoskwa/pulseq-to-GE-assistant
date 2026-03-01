@@ -12,11 +12,11 @@ Two components:
 
 ## Dependencies
 
-| Dependency | Required for | Source |
+| Dependency | Required for | Status |
 |------------|-------------|--------|
-| Pulseq (`+mr`) | `lint()` on .seq files, `pipeline()` | https://github.com/pulseq/pulseq |
-| PulCeq (`seq2ceq`) | `pipeline()` | https://github.com/HarmonizedMRI/PulCeq |
-| pge2 (`+pge2`) | `pipeline()` | https://github.com/GEHC-External/pulseq-ge-interpreter |
+| Pulseq (`+mr`) | `lint()` on .seq files, `pipeline()` | External — https://github.com/pulseq/pulseq |
+| PulCeq (`seq2ceq`) | `pipeline()` | Bundled in `deps/` |
+| pge2 (`+pge2`) | `pipeline()` | Bundled in `deps/` |
 
 `lint()` on `.m` files works without any dependencies.
 
@@ -25,13 +25,14 @@ Two components:
 ```matlab
 addpath('/path/to/pulseq-ge-tools');
 
-% Pass the directories that contain +mr, seq2ceq.m, and +pge2 (same as addpath)
-pulseq_ge.setup('/path/to/pulseq/matlab', ...
-                '/path/to/PulCeq/matlab', ...
-                '/path/to/pge2/matlab');
+% Point to your Pulseq installation (PulCeq and pge2 are bundled)
+pulseq_ge.setup('/path/to/pulseq/matlab');
 
-% If dependencies are already on your MATLAB path, just call:
+% If Pulseq is already on your MATLAB path:
 pulseq_ge.setup();
+
+% To override bundled deps with your own versions, pass additional paths:
+pulseq_ge.setup('/path/to/pulseq/matlab', '/path/to/my/PulCeq/matlab');
 ```
 
 ## Usage

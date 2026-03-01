@@ -3,23 +3,31 @@ function paths = setup(varargin)
 %
 %   pulseq_ge.setup('path1', 'path2', ...)
 %
-%   Calls addpath(genpath(...)) on each argument to add it and all
-%   subdirectories, then verifies that +mr, seq2ceq, and +pge2 are
-%   reachable. Reports which dependencies are found.
+%   Automatically adds the bundled deps/ directory (containing PulCeq and
+%   pge2) to the MATLAB path, then adds any user-supplied paths. Finally,
+%   verifies that +mr, seq2ceq, and +pge2 are reachable.
 %
-%   With no arguments, just checks what is already on the path.
+%   Only Pulseq (+mr) is required as an external dependency. PulCeq
+%   (seq2ceq) and pge2 (+pge2) are bundled in deps/.
 %
 %   Examples:
-%     % Add a single root containing all dependencies
-%     pulseq_ge.setup('/repos/my-pulseq-project');
+%     % Typical usage — just point to your Pulseq installation
+%     pulseq_ge.setup('/path/to/pulseq/matlab');
 %
-%     % Or add each dependency separately
-%     pulseq_ge.setup('/repos/pulseq', '/repos/PulCeq', '/repos/pge2');
-%
-%     % Or if already on path:
+%     % If Pulseq is already on your path:
 %     pulseq_ge.setup();
+%
+%     % Override bundled deps with external versions
+%     pulseq_ge.setup('/path/to/pulseq/matlab', '/path/to/my/PulCeq');
 
-%% Add all supplied paths
+%% Add bundled deps/ to path
+pkgDir = fileparts(fileparts(mfilename('fullpath')));  % parent of +pulseq_ge/
+depsDir = fullfile(pkgDir, 'deps');
+if isfolder(depsDir)
+    addpath(genpath(depsDir));
+end
+
+%% Add all user-supplied paths (these take precedence)
 for k = 1:numel(varargin)
     p = varargin{k};
     assert(ischar(p) || isstring(p), 'Arguments must be path strings');
