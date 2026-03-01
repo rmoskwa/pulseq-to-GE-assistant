@@ -30,9 +30,6 @@ pulseq_ge.setup('/path/to/pulseq/matlab');
 
 % If Pulseq is already on your MATLAB path:
 pulseq_ge.setup();
-
-% To override bundled deps with your own versions, pass additional paths:
-pulseq_ge.setup('/path/to/pulseq/matlab', '/path/to/my/PulCeq/matlab');
 ```
 
 ## Usage
@@ -80,14 +77,6 @@ fprintf('%s\n', txt{:});
 | `slew_max` | `20` | Max slew rate [G/cm/ms] |
 | `PNSwt` | `[1 1 1]` | PNS channel weights |
 
-## Testing
-
-```matlab
-cd pulseq-ge-tools
-test_pulseq_ge          % lint tests only
-test_pulseq_ge(true)    % includes pipeline tests (requires all dependencies)
-```
-
 ## Using AGENTS.md with AI coding assistants
 
 The `AGENTS.md` file contains structured instructions for any AI coding agent to assist with GE conversion. Symlink it for your tool:
@@ -102,7 +91,3 @@ ln -s AGENTS.md .cursorrules
 # GitHub Copilot
 mkdir -p .github && ln -s ../AGENTS.md .github/copilot-instructions.md
 ```
-
-## License
-
-See [LICENSE](LICENSE).
