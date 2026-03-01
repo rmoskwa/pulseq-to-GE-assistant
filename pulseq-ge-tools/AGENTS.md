@@ -12,27 +12,13 @@ You are assisting a pulse sequence programmer with converting a vendor-neutral P
 | **PulCeq** (`seq2ceq`) | .seq → Ceq conversion | Bundled in `deps/` |
 | **pge2** (`+pge2` toolbox) | GE hardware checks, .pge writing | Bundled in `deps/` |
 
-### Quick start
-
-```matlab
-% Point to your Pulseq installation (PulCeq and pge2 are bundled)
-pulseq_ge.setup('/path/to/pulseq/matlab');
-
-r = pulseq_ge.lint('mySequence.m');              % static analysis
-result = pulseq_ge.pipeline('myseq.seq', 'coil', 'xrm');  % full validation
-```
-
-If Pulseq is already on the MATLAB path, `pulseq_ge.setup()` with no arguments will verify all dependencies.
-
-If `pulseq_ge` is not available, the checklist and patterns below still apply — run the pipeline commands manually (see Section 5).
-
 ---
 
 ## Section 1 — GE Adaptation Checklist
 
 When reviewing a Pulseq `.m` script for GE compatibility, check every item below. Mark each as PASS, FAIL, or N/A and explain what needs to change.
 
-### 1. GE raster times in `mr.opts()`
+### 1. GE raster times and event delays in `mr.opts()`
 
 The default Pulseq raster times target Siemens hardware. GE requires:
 
@@ -46,6 +32,30 @@ sys = mr.opts(...
 ```
 
 If any of these are missing or use Pulseq defaults, the sequence will fail on GE hardware.
+
+**Event delay alignment** — in addition to raster times, event delays within blocks must also be aligned:
+- Gradient event delays: integer multiple of **4 us**
+- RF event delays: integer multiple of **2 us**
+- ADC event delays: integer multiple of **1 us**
+
+**RF/ADC dead and ringdown times** — the actual GE hardware timing requirements are:
+
+| Parameter | Hardware value | Notes |
+|-----------|---------------|-------|
+| RF dead time (amplifier ON) | 72 us | Gap required before RF event |
+| RF ringdown time (amplifier OFF) | 54 us | Gap required after RF event |
+| ADC dead time (ADC ON) | 40 us | Gap required before ADC event |
+| ADC ringdown time (ADC OFF) | 0 us | No gap required after ADC |
+
+The key constraint is that dead/ringdown intervals from one RF/ADC event must not overlap with those from another RF/ADC event. Note that within a segment, block boundaries "disappear" — the interpreter treats the segment as a single contiguous waveform. This means it is often possible to set `rfDeadTime`, `rfRingdownTime`, and `adcDeadTime` to **0** in `mr.opts()` as long as there is sufficient gap in adjacent blocks within the segment to satisfy the hardware timing. This can produce more time-efficient sequences:
+
+```matlab
+% Conservative (explicit padding in every block):
+sys = mr.opts(..., 'rfDeadTime', 100e-6, 'rfRingdownTime', 60e-6, 'adcDeadTime', 40e-6, ...);
+
+% Aggressive (no padding — you must verify gaps manually):
+sys = mr.opts(..., 'rfDeadTime', 0, 'rfRingdownTime', 0, 'adcDeadTime', 0, ...);
+```
 
 ### 2. Gradient limits divided by sqrt(3)
 
@@ -156,7 +166,9 @@ Use the Pulseq rotation event system, not the older `mr.rotate()` or `mr.rotate3
 
 ### 10. Segment ringdown time (117 us)
 
-The pge2 interpreter inserts a ~117 us dead time at the end of each segment instance (17 us + SSI time). Account for this when designing timing-critical sequences — the effective TR will be longer than the sum of block durations.
+The pge2 interpreter inserts a ~117 us dead time at the end of each segment instance (17 us + SSI time). This gap is adjustable on the scanner — it equals 17 us plus the SSI time. Account for this when designing timing-critical sequences — the effective TR will be longer than the sum of block durations.
+
+Additionally, the interpreter internally delays RF and ADC events by ~100 us to compensate for gradient delays. Depending on the sequence, you may need to extend the segment duration to account for this.
 
 ### 11. ADC dwell time is a multiple of 2 us
 
@@ -197,6 +209,8 @@ sys = mr.opts('maxGrad', 50/sqrt(3), 'gradUnit', 'mT/m', ...
 ```
 
 Key changes: add all four raster times, divide gradient limits by `sqrt(3)`, set GE-appropriate dead/ringdown times.
+
+For timing-critical sequences (e.g., EPI), you can set dead/ringdown times to 0 since block boundaries disappear within a segment — but you must manually verify that sufficient gaps exist between RF/ADC events (see checklist item 1 for hardware timing values).
 
 ### Pattern B: Adding TRID labels to a scan loop
 
@@ -305,11 +319,24 @@ Look for repeating patterns in the scan loop. Each iteration of the main loop is
 
 ### When to assign different TRIDs
 
+Dynamic changes that **do not** require a new TRID (same virtual segment):
+- Gradient/RF **amplitude scaling** (via `mr.scaleGrad()`)
+- **RF/receive phase** and frequency offsets (e.g., per-slice frequency offsets)
+- **Duration of a pure delay block** (a block containing only a delay event)
+- **Gradient rotation** (via rotation events)
+
+Dynamic changes that **do** require a separate TRID (different virtual segment):
+- **Waveform shape or duration** changes
+- **Block execution order** within the segment changes
+- **Duration of non-delay blocks** changes (blocks containing RF, gradient, or ADC events)
+
 | Scenario | Same TRID? | Why |
 |----------|-----------|-----|
 | Dummy TR vs imaging TR (same blocks, just no ADC) | Different | Block content differs (ADC present/absent) |
 | Phase-encode steps with different gradient amplitudes | Same | Only amplitude scaling changes |
+| Per-slice RF frequency/phase offsets | Same | RF/receive phase does not change segment structure |
 | Variable delay within a TR | Same | Pure delay duration can vary within a segment |
+| Gradient rotation per segment instance | Same | Rotation events are handled dynamically |
 | Calibration TR with different readout pattern | Different | Block structure differs |
 | Noise scans (completely different structure) | Different | Entirely different block sequence |
 
@@ -371,6 +398,50 @@ txt = pulseq_ge.report('myseq.seq', 'coil', 'xrm');
 fprintf('%s\n', txt{:});
 ```
 
+### Automated validation loop (`run_report`)
+
+`run_report()` combines script execution, lint, and pipeline into a single call with machine-parseable output. Use this for iterative convert-validate-fix cycles.
+
+**Setup:** Copy `.env.example` to `.env` at the repo root and set `PULSEQ_PATH` to your Pulseq toolbox path. Optionally set `GE_COIL` (defaults to `xrm`).
+
+**Command-line invocation (from repo root):**
+```bash
+matlab -nodisplay -nosplash -nodesktop -batch \
+  "addpath('pulseq-ge-tools'); run_report('mySequence_GE.m')"
+```
+
+**MATLAB invocation:**
+```matlab
+addpath('pulseq-ge-tools');
+result = run_report('mySequence_GE.m');           % uses .env defaults
+result = run_report('mySequence_GE.m', 'coil', 'hrmw');  % override coil
+```
+
+**Output format:** Delimited by `=== RUN_REPORT START ===` and `=== RUN_REPORT END ===`. Key tokens to parse:
+
+| Token | Meaning |
+|-------|---------|
+| `SEQ_GENERATION: PASS/FAIL` | Whether the `.seq` file was generated |
+| `M_LINT_RESULT: PASS/FAIL` | Static analysis of the `.m` source |
+| `SEQ_LINT_RESULT: PASS/FAIL` | Raster/TRID/zero-grad checks on `.seq` |
+| `PIPELINE_RESULT: PASS/FAIL` | seq2ceq + pge2.check + pge2.validate |
+| `OVERALL: PASS/FAIL` | All checks passed |
+
+Individual issues are printed as `ISSUE: <description>` lines within each section.
+
+**Agent workflow:**
+1. Convert the standard Pulseq `.m` script to a GE-compatible version
+2. Run `run_report('scriptName.m')` to validate
+3. Parse output for `PASS`/`FAIL` tokens
+4. If any section shows `FAIL`, read the `ISSUE:` lines and fix the code
+5. Repeat from step 2 until `OVERALL: PASS`
+
+### Safety: gradient/RF power estimation
+
+The pge2 interpreter estimates gradient heating, RF subsystem load, and patient SAR using a sliding average over **the first 40,000 blocks** in the sequence (or until the end of the scan, whichever comes first). It is the sequence designer's responsibility to ensure that gradient/RF power in the remainder of the sequence does not exceed that in the first 40,000 blocks. This limit is due to memory constraints on the scanner.
+
+PNS (peripheral nerve stimulation) checking is handled by `pge2.check()` on the MATLAB side.
+
 ---
 
 ## Section 5 — Workflow
@@ -378,11 +449,12 @@ fprintf('%s\n', txt{:});
 When a user asks you to help convert a sequence for GE:
 
 1. **Read the source `.m` file** completely
-2. **Run through the 11-item checklist** from Section 1, reporting each item
-3. **Propose specific code changes** using the before/after patterns in Section 2
-4. **Help design TRID structure** using the guidance in Section 3
-5. **After changes are applied**, guide the user through the pipeline (Section 4)
-6. **If `pulseq_ge` is available**, run `pulseq_ge.lint()` first and `pulseq_ge.pipeline()` after
+2. **Read the example_GRE_GE_seq.m** file to learn best practices for GE-compatible Pulseq code
+3. **Run through the 11-item checklist** from Section 1, reporting each item
+4. **Propose specific code changes** using the before/after patterns in Section 2
+5. **Help design TRID structure** using the guidance in Section 3
+6. **After changes are applied**, run `run_report('scriptName.m')` to validate (see Section 4)
+7. **If any checks fail**, read the `ISSUE:` lines, fix the code, and re-run `run_report` until `OVERALL: PASS`
 
 ### Common GE coil options for `pge2.opts()`
 

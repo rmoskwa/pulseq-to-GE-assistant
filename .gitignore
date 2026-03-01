@@ -1,6 +1,7 @@
 .venv/
 .claude/
+.env
 ge-sequence-examples/
 pulseq-source-code/
 CLAUDE.md
-gre2d.seq
+*.seq
